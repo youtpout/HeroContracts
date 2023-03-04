@@ -11,7 +11,8 @@ import "hardhat/console.sol";
 contract GameManager is AccessControlEnumerableUpgradeable {
     enum ActionType {
         Burn,
-        Mint
+        Mint,
+        Transfer
     }
 
     enum ContractType {
@@ -28,6 +29,7 @@ contract GameManager is AccessControlEnumerableUpgradeable {
         address recipient;
         uint256 tokenId;
         uint256 amount;
+        bytes data;
     }
 
     bytes32 public constant MASTER_ROLE = keccak256("MASTER_ROLE");
@@ -53,6 +55,12 @@ contract GameManager is AccessControlEnumerableUpgradeable {
                     erc20.burnFrom(currentAction.spender, currentAction.amount);
                 } else if (currentAction.actionType == ActionType.Mint) {
                     erc20.mint(currentAction.recipient, currentAction.amount);
+                } else if (currentAction.actionType == ActionType.Transfer) {
+                    erc20.transferFrom(
+                        currentAction.spender,
+                        currentAction.recipient,
+                        currentAction.amount
+                    );
                 }
             } else if (currentAction.contractType == ContractType.Erc721) {
                 IERC721 erc721 = IERC721(currentAction.contractAddress);
@@ -60,6 +68,13 @@ contract GameManager is AccessControlEnumerableUpgradeable {
                     erc721.burn(currentAction.tokenId);
                 } else if (currentAction.actionType == ActionType.Mint) {
                     erc721.mint(currentAction.recipient);
+                } else if (currentAction.actionType == ActionType.Transfer) {
+                    erc721.safeTransferFrom(
+                        currentAction.spender,
+                        currentAction.recipient,
+                        currentAction.tokenId,
+                        currentAction.data
+                    );
                 }
             } else if (currentAction.contractType == ContractType.Erc1155) {
                 IERC1155 erc1155 = IERC1155(currentAction.contractAddress);
@@ -74,7 +89,15 @@ contract GameManager is AccessControlEnumerableUpgradeable {
                         currentAction.recipient,
                         currentAction.tokenId,
                         currentAction.amount,
-                        ""
+                        currentAction.data
+                    );
+                } else if (currentAction.actionType == ActionType.Transfer) {
+                    erc1155.safeTransferFrom(
+                        currentAction.spender,
+                        currentAction.recipient,
+                        currentAction.tokenId,
+                        currentAction.amount,
+                        currentAction.data
                     );
                 }
             }
