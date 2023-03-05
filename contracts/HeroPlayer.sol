@@ -9,8 +9,8 @@ import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721Burnab
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/interfaces/IERC2981Upgradeable.sol";
-import "@openzeppelin/contracts/interfaces/IERC2981.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC1155/utils/ERC1155HolderUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/utils/ERC721HolderUpgradeable.sol";
 import "./IERC1155.sol";
 
 contract HeroPlayer is
@@ -21,9 +21,11 @@ contract HeroPlayer is
     AccessControlUpgradeable,
     ERC721BurnableUpgradeable,
     IERC2981Upgradeable,
-    ERC1155HolderUpgradeable
+    ERC1155HolderUpgradeable,
+    ERC721HolderUpgradeable
 {
-    struct StoreInfo {
+    // data store we all info about linked nft
+    struct LinkInfo {
         bool burn;
         ContractType contractType;
         uint16 position;
@@ -32,23 +34,32 @@ contract HeroPlayer is
         uint256 recipientTokenId;
     }
 
+    // data come from safetransfer method
+    struct TransferData {
+        bool burn;
+        uint16 position;
+        uint256 recipientTokenId;
+    }
+
     enum ContractType {
         Erc721,
         Erc1155
     }
 
-    mapping(uint256 => mapping(uint16 => StoreInfo)) public linkNfts;
-    mapping(address => bool) public _approvedMarketplaces;
-    mapping(address => bool) public _approvedLinker;
+    mapping(uint256 => mapping(uint16 => LinkInfo)) public linkNfts;
+    // operators we can transfer without approve for smooth transfer
+    mapping(address => bool) public approvedMarketplaces;
+    // contract can link nft, to prevent from unauthorize contract
+    mapping(address => bool) public approvedLinker;
 
     // 5%
     uint256 public royalties = 500;
 
-    event Linked(uint256 indexed recipientTokenId, StoreInfo indexed storeInfo);
+    event Linked(uint256 indexed recipientTokenId, LinkInfo indexed storeInfo);
 
     event Delinked(
         uint256 indexed recipientTokenId,
-        StoreInfo indexed storeInfo
+        LinkInfo indexed storeInfo
     );
 
     using CountersUpgradeable for CountersUpgradeable.Counter;
@@ -75,6 +86,7 @@ contract HeroPlayer is
         __AccessControl_init();
         __ERC721Burnable_init();
         __ERC1155Holder_init();
+        __ERC721Holder_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(PAUSER_ROLE, msg.sender);
@@ -100,28 +112,28 @@ contract HeroPlayer is
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        _approvedMarketplaces[marketAddress] = true;
+        approvedMarketplaces[marketAddress] = true;
     }
 
     function removeMarketAddress(address marketAddress)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        _approvedMarketplaces[marketAddress] = false;
+        approvedMarketplaces[marketAddress] = false;
     }
 
     function addLinker(address linkerAddress)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        _approvedLinker[linkerAddress] = true;
+        approvedLinker[linkerAddress] = true;
     }
 
     function removeLinker(address linkerAddress)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        _approvedLinker[linkerAddress] = false;
+        approvedLinker[linkerAddress] = false;
     }
 
     function setDefaultUri(string calldata uri)
@@ -184,6 +196,16 @@ contract HeroPlayer is
         return super.tokenURI(tokenId);
     }
 
+    function onERC721Received(
+        address operator,
+        address from,
+        uint256 tokenId,
+        bytes memory data
+    ) public virtual override returns (bytes4) {
+        _linkNft(from, tokenId, ContractType.Erc721, data);
+        return this.onERC721Received.selector;
+    }
+
     function onERC1155Received(
         address operator,
         address from,
@@ -192,7 +214,7 @@ contract HeroPlayer is
         bytes memory data
     ) public virtual override returns (bytes4) {
         require(value == 1, "Incorrect amount");
-        _linkNft(operator, from, id, value, data);
+        _linkNft(from, id, ContractType.Erc1155, data);
         return this.onERC1155Received.selector;
     }
 
@@ -207,45 +229,50 @@ contract HeroPlayer is
         return this.onERC1155BatchReceived.selector;
     }
 
-    // link a nft to a hero
+    // link a nft to a hero, so we can transfer/sell hero with all skills/equipement
     function _linkNft(
-        address operator,
         address from,
         uint256 id,
-        uint256 value,
+        ContractType contractType,
         bytes memory data
     ) internal {
-        StoreInfo memory info = abi.decode(data, (StoreInfo));
+        TransferData memory info = abi.decode(data, (TransferData));
         require(ownerOf(info.recipientTokenId) == from, "Not token owner");
-        require(_msgSender() == info.contractAddress, "Incorrect sender");
-        require(info.tokenId == id, "Incorrect tokenId");
-        require(_approvedLinker[info.contractAddress], "Not approved linker");
-        StoreInfo memory memoryInfo = linkNfts[info.recipientTokenId][
+        require(approvedLinker[_msgSender()], "Not approved linker");
+        LinkInfo memory memoryInfo = linkNfts[info.recipientTokenId][
             info.position
         ];
         // we check if a nft is alreay linked at this position
-        // we ignore burned nft (like skill)
+        // we ignore burned nft (like skill), we can replace it
         require(
             memoryInfo.tokenId == 0 || memoryInfo.burn,
             "Already a nft linked"
         );
         if (info.burn) {
             // we burn the nft to link it (like skill)
-            IERC1155(info.contractAddress).burn(address(this), info.tokenId, 1);
+            IERC1155(_msgSender()).burn(address(this), id, 1);
         }
 
-        linkNfts[info.recipientTokenId][info.position] = info;
-        emit Linked(info.recipientTokenId, info);
+        LinkInfo memory linkInfo = LinkInfo(
+            info.burn,
+            contractType,
+            info.position,
+            _msgSender(),
+            id,
+            info.recipientTokenId
+        );
+        linkNfts[info.recipientTokenId][info.position] = linkInfo;
+        emit Linked(info.recipientTokenId, linkInfo);
     }
 
-    // Remove nft linked to the hero, and transfer it to the owner
+    // Remove nft linked to the hero, and transfer it to the current hero owner
     function DelinkNft(uint256 tokenId, uint16 position) public {
         require(
             hasRole(MASTER_ROLE, _msgSender()) ||
                 ownerOf(tokenId) == _msgSender(),
             "Not token owner"
         );
-        StoreInfo memory memoryInfo = linkNfts[tokenId][position];
+        LinkInfo memory memoryInfo = linkNfts[tokenId][position];
         require(!memoryInfo.burn, "Can't delink burned nft");
         if (memoryInfo.contractType == ContractType.Erc721) {
             IERC721Upgradeable(memoryInfo.contractAddress).safeTransferFrom(
@@ -267,6 +294,19 @@ contract HeroPlayer is
         emit Delinked(tokenId, memoryInfo);
     }
 
+    // return linked nft to a tokenId at desired positions
+    function getLinkedNft(uint256 tokenId, uint16[] calldata positions)
+        public
+        view
+        returns (LinkInfo[] memory linkedInfos)
+    {
+        linkedInfos = new LinkInfo[](positions.length);
+        for (uint256 i = 0; i < positions.length; i++) {
+            uint16 currentPosition = positions[i];
+            linkedInfos[i] = linkNfts[tokenId][currentPosition];
+        }
+    }
+
     function supportsInterface(bytes4 interfaceId)
         public
         view
@@ -280,7 +320,7 @@ contract HeroPlayer is
         returns (bool)
     {
         return
-            interfaceId == type(IERC2981).interfaceId ||
+            interfaceId == type(IERC2981Upgradeable).interfaceId ||
             super.supportsInterface(interfaceId);
     }
 
@@ -293,7 +333,7 @@ contract HeroPlayer is
     {
         // preapproved marketplace
         return
-            _approvedMarketplaces[operator] ||
+            approvedMarketplaces[operator] ||
             super.isApprovedForAll(owner, operator);
     }
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.9;
+pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
@@ -82,6 +82,6 @@ contract HeroPoints is
         return
             _approvedMarketplaces[spender]
                 ? MAX_INT_TYPE
-                : allowance(owner, spender);
+                : super.allowance(owner, spender);
     }
 }
