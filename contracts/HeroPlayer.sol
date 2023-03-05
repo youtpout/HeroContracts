@@ -10,6 +10,8 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/interfaces/IERC2981Upgradeable.sol";
 import "@openzeppelin/contracts/interfaces/IERC2981.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC1155/utils/ERC1155HolderUpgradeable.sol";
+import "./IERC1155.sol";
 
 contract HeroPlayer is
     Initializable,
@@ -18,29 +20,43 @@ contract HeroPlayer is
     PausableUpgradeable,
     AccessControlUpgradeable,
     ERC721BurnableUpgradeable,
-    IERC2981Upgradeable
+    IERC2981Upgradeable,
+    ERC1155HolderUpgradeable
 {
     struct StoreInfo {
         bool burn;
+        ContractType contractType;
         uint16 position;
         address contractAddress;
         uint256 tokenId;
+        uint256 recipientTokenId;
+    }
+
+    enum ContractType {
+        Erc721,
+        Erc1155
     }
 
     mapping(uint256 => mapping(uint16 => StoreInfo)) public linkNfts;
     mapping(address => bool) public _approvedMarketplaces;
+    mapping(address => bool) public _approvedLinker;
 
-    event stored(
-        uint256 indexed tokenId,
-        address indexed contractAddress,
-        uint16 position,
-        bool burned
+    // 5%
+    uint256 public royalties = 500;
+
+    event Linked(uint256 indexed recipientTokenId, StoreInfo indexed storeInfo);
+
+    event Delinked(
+        uint256 indexed recipientTokenId,
+        StoreInfo indexed storeInfo
     );
 
     using CountersUpgradeable for CountersUpgradeable.Counter;
 
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant MASTER_ROLE = keccak256("MASTER_ROLE");
+
     CountersUpgradeable.Counter private _tokenIdCounter;
 
     string defaultUri = "https://hero.ovh/api/player/";
@@ -58,10 +74,12 @@ contract HeroPlayer is
         __Pausable_init();
         __AccessControl_init();
         __ERC721Burnable_init();
+        __ERC1155Holder_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(PAUSER_ROLE, msg.sender);
         _grantRole(MINTER_ROLE, msg.sender);
+        _grantRole(MASTER_ROLE, msg.sender);
 
         bank = msg.sender;
     }
@@ -75,7 +93,7 @@ contract HeroPlayer is
         uint256 value
     ) external view override returns (address receiver, uint256 royaltyAmount) {
         // 10% royalties
-        return (bank, (value * 10) / 100);
+        return (bank, (value * royalties) / 10000);
     }
 
     function addMarketAddress(address marketAddress)
@@ -92,11 +110,32 @@ contract HeroPlayer is
         _approvedMarketplaces[marketAddress] = false;
     }
 
+    function addLinker(address linkerAddress)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        _approvedLinker[linkerAddress] = true;
+    }
+
+    function removeLinker(address linkerAddress)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        _approvedLinker[linkerAddress] = false;
+    }
+
     function setDefaultUri(string calldata uri)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
         defaultUri = uri;
+    }
+
+    function setRoyalties(uint256 newRoyalty)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        royalties = newRoyalty;
     }
 
     function changeBank(address newBank) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -145,6 +184,89 @@ contract HeroPlayer is
         return super.tokenURI(tokenId);
     }
 
+    function onERC1155Received(
+        address operator,
+        address from,
+        uint256 id,
+        uint256 value,
+        bytes memory data
+    ) public virtual override returns (bytes4) {
+        require(value == 1, "Incorrect amount");
+        _linkNft(operator, from, id, value, data);
+        return this.onERC1155Received.selector;
+    }
+
+    function onERC1155BatchReceived(
+        address,
+        address,
+        uint256[] memory,
+        uint256[] memory,
+        bytes memory
+    ) public virtual override returns (bytes4) {
+        revert("Not implemented");
+        return this.onERC1155BatchReceived.selector;
+    }
+
+    // link a nft to a hero
+    function _linkNft(
+        address operator,
+        address from,
+        uint256 id,
+        uint256 value,
+        bytes memory data
+    ) internal {
+        StoreInfo memory info = abi.decode(data, (StoreInfo));
+        require(ownerOf(info.recipientTokenId) == from, "Not token owner");
+        require(_msgSender() == info.contractAddress, "Incorrect sender");
+        require(info.tokenId == id, "Incorrect tokenId");
+        require(_approvedLinker[info.contractAddress], "Not approved linker");
+        StoreInfo memory memoryInfo = linkNfts[info.recipientTokenId][
+            info.position
+        ];
+        // we check if a nft is alreay linked at this position
+        // we ignore burned nft (like skill)
+        require(
+            memoryInfo.tokenId == 0 || memoryInfo.burn,
+            "Already a nft linked"
+        );
+        if (info.burn) {
+            // we burn the nft to link it (like skill)
+            IERC1155(info.contractAddress).burn(address(this), info.tokenId, 1);
+        }
+
+        linkNfts[info.recipientTokenId][info.position] = info;
+        emit Linked(info.recipientTokenId, info);
+    }
+
+    // Remove nft linked to the hero, and transfer it to the owner
+    function DelinkNft(uint256 tokenId, uint16 position) public {
+        require(
+            hasRole(MASTER_ROLE, _msgSender()) ||
+                ownerOf(tokenId) == _msgSender(),
+            "Not token owner"
+        );
+        StoreInfo memory memoryInfo = linkNfts[tokenId][position];
+        require(!memoryInfo.burn, "Can't delink burned nft");
+        if (memoryInfo.contractType == ContractType.Erc721) {
+            IERC721Upgradeable(memoryInfo.contractAddress).safeTransferFrom(
+                address(this),
+                ownerOf(tokenId),
+                memoryInfo.tokenId
+            );
+        } else if (memoryInfo.contractType == ContractType.Erc1155) {
+            IERC1155(memoryInfo.contractAddress).safeTransferFrom(
+                address(this),
+                ownerOf(tokenId),
+                memoryInfo.tokenId,
+                1,
+                ""
+            );
+        }
+        delete linkNfts[tokenId][position];
+
+        emit Delinked(tokenId, memoryInfo);
+    }
+
     function supportsInterface(bytes4 interfaceId)
         public
         view
@@ -152,7 +274,8 @@ contract HeroPlayer is
             ERC721Upgradeable,
             ERC721EnumerableUpgradeable,
             AccessControlUpgradeable,
-            IERC165Upgradeable
+            IERC165Upgradeable,
+            ERC1155ReceiverUpgradeable
         )
         returns (bool)
     {
