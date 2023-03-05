@@ -197,7 +197,7 @@ contract HeroPlayer is
     }
 
     function onERC721Received(
-        address operator,
+        address,
         address from,
         uint256 tokenId,
         bytes memory data
@@ -207,7 +207,7 @@ contract HeroPlayer is
     }
 
     function onERC1155Received(
-        address operator,
+        address,
         address from,
         uint256 id,
         uint256 value,
@@ -226,7 +226,7 @@ contract HeroPlayer is
         bytes memory
     ) public virtual override returns (bytes4) {
         revert("Not implemented");
-        return this.onERC1155BatchReceived.selector;
+        //return this.onERC1155BatchReceived.selector;
     }
 
     // link a nft to a hero, so we can transfer/sell hero with all skills/equipement
@@ -235,7 +235,7 @@ contract HeroPlayer is
         uint256 id,
         ContractType contractType,
         bytes memory data
-    ) internal {
+    ) internal whenNotPaused {
         TransferData memory info = abi.decode(data, (TransferData));
         require(ownerOf(info.recipientTokenId) == from, "Not token owner");
         require(approvedLinker[_msgSender()], "Not approved linker");
@@ -266,7 +266,7 @@ contract HeroPlayer is
     }
 
     // Remove nft linked to the hero, and transfer it to the current hero owner
-    function DelinkNft(uint256 tokenId, uint16 position) public {
+    function DelinkNft(uint256 tokenId, uint16 position) public whenNotPaused {
         require(
             hasRole(MASTER_ROLE, _msgSender()) ||
                 ownerOf(tokenId) == _msgSender(),

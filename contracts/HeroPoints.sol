@@ -19,7 +19,7 @@ contract HeroPoints is
 
     uint256 public constant MAX_INT_TYPE = type(uint256).max;
 
-    mapping(address => bool) public _approvedMarketplaces;
+    mapping(address => bool) public approvedMarketplaces;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -41,14 +41,14 @@ contract HeroPoints is
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        _approvedMarketplaces[marketAddress] = true;
+        approvedMarketplaces[marketAddress] = true;
     }
 
     function removeMarketAddress(address marketAddress)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        _approvedMarketplaces[marketAddress] = false;
+        approvedMarketplaces[marketAddress] = false;
     }
 
     function pause() public onlyRole(PAUSER_ROLE) {
@@ -80,7 +80,7 @@ contract HeroPoints is
     {
         // approved marketplace can spend as it want
         return
-            _approvedMarketplaces[spender]
+            approvedMarketplaces[spender]
                 ? MAX_INT_TYPE
                 : super.allowance(owner, spender);
     }
