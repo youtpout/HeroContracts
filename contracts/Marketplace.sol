@@ -9,13 +9,16 @@ import "@openzeppelin/contracts-upgradeable/token/ERC721/utils/ERC721HolderUpgra
 import "./IERC20.sol";
 import "./IERC721.sol";
 import "./IERC1155.sol";
+import "@openzeppelin/contracts-upgradeable/interfaces/IERC2981Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
 contract Marketplace is
     Initializable,
     PausableUpgradeable,
     AccessControlUpgradeable,
     ERC1155HolderUpgradeable,
-    ERC721HolderUpgradeable
+    ERC721HolderUpgradeable,
+    ReentrancyGuardUpgradeable
 {
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
@@ -37,7 +40,7 @@ contract Marketplace is
         uint256 tokenId;
         uint256 initialAmount;
         uint256 currentAmount;
-        uint256 price;
+        uint256 priceByUnit;
         address seller;
         address tokenAccepted;
         address contractAddress;
@@ -80,6 +83,9 @@ contract Marketplace is
     function initialize() public initializer {
         __Pausable_init();
         __AccessControl_init();
+        __ReentrancyGuard_init();
+        __ERC1155Holder_init();
+        __ERC721Holder_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(PAUSER_ROLE, msg.sender);
@@ -150,7 +156,7 @@ contract Marketplace is
         uint256 amount,
         ContractType contractType,
         bytes memory data
-    ) internal whenNotPaused {
+    ) internal nonReentrant whenNotPaused {
         TransferData memory info = abi.decode(data, (TransferData));
         require(approvedToken[info.tokenAccepted], "Invalid token");
 
@@ -173,7 +179,7 @@ contract Marketplace is
         emit OrderAdded(orderCount, from, orderInfo);
     }
 
-    function cancelOrder(uint256 orderId) public {
+    function cancelOrder(uint256 orderId) public nonReentrant whenNotPaused {
         Order storage order = orders[orderId];
         require(
             order.status == OrderStatus.Active,
@@ -213,19 +219,23 @@ contract Marketplace is
         uint256 orderId,
         uint256 price,
         uint256 amount
-    ) public payable {
+    ) public payable nonReentrant whenNotPaused {
         Order storage order = orders[orderId];
+        require(
+            hasRole(MASTER_ROLE, _msgSender()) || buyer == _msgSender(),
+            "Only the buyer can pay"
+        );
         require(
             order.status == OrderStatus.Active,
             "Order is no longer available!"
         );
         require(amount > 0, "You can't buy nothing");
         require(order.currentAmount >= amount, "Not enough quantity");
-
-        uint256 orderPrice = order.price;
-        if (order.sellByUnit) {
-            orderPrice = order.price * amount;
+        if (!order.sellByUnit) {
+            require(amount == order.currentAmount, "Can't buy by unit");
         }
+
+        uint256 orderPrice = order.priceByUnit * amount;
 
         if (order.tokenAccepted == address(0)) {
             require(orderPrice == msg.value, "Buy price isn't equal to price!");
@@ -234,6 +244,40 @@ contract Marketplace is
         }
 
         //todo pay part
+        (address taxReceiver, uint256 tax) = IERC2981Upgradeable(
+            order.contractAddress
+        ).royaltyInfo(order.tokenId, orderPrice);
+
+        require(tax <= orderPrice / 5, "Too much tax");
+        uint256 restToPay = orderPrice - tax;
+
+        if (order.tokenAccepted == address(0)) {
+            if (tax > 0) {
+                // paid royalties
+                (bool sentTax, ) = taxReceiver.call{value: tax}("");
+                require(sentTax, "Failed to send tax Ether");
+            }
+            // paid the seller
+            (bool sent, ) = order.seller.call{value: restToPay}("");
+            require(sent, "Failed to send Ether");
+        } else {
+            if (tax > 0) {
+                // paid royalties
+                bool sentTax = IERC20(order.tokenAccepted).transferFrom(
+                    buyer,
+                    taxReceiver,
+                    tax
+                );
+                require(sentTax, "Failed to send tax Erc20");
+            }
+            // paid the seller
+            bool sent = IERC20(order.tokenAccepted).transferFrom(
+                buyer,
+                order.seller,
+                restToPay
+            );
+            require(sent, "Failed to send ERC20");
+        }
 
         if (order.contractType == ContractType.Erc721) {
             IERC721(order.contractAddress).safeTransferFrom(

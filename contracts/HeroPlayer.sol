@@ -104,7 +104,6 @@ contract HeroPlayer is
         uint256, /*tokenId*/
         uint256 value
     ) external view override returns (address receiver, uint256 royaltyAmount) {
-        // 10% royalties
         return (bank, (value * royalties) / 10000);
     }
 
