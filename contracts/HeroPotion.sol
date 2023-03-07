@@ -9,7 +9,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC1155/extensions/ERC1155Supp
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/interfaces/IERC2981Upgradeable.sol";
 
-contract HeroSkill is
+contract HeroPotion is
     Initializable,
     ERC1155Upgradeable,
     AccessControlUpgradeable,
@@ -36,7 +36,7 @@ contract HeroSkill is
     }
 
     function initialize() public initializer {
-        __ERC1155_init("https://hero.ovh/api/skill/{id}");
+        __ERC1155_init("https://hero.ovh/api/potion/{id}");
         __AccessControl_init();
         __Pausable_init();
         __ERC1155Burnable_init();
@@ -54,7 +54,6 @@ contract HeroSkill is
         uint256, /*tokenId*/
         uint256 value
     ) external view override returns (address receiver, uint256 royaltyAmount) {
-        // 10% royalties
         return (bank, (value * royalties) / 10000);
     }
 
