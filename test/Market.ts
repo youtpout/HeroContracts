@@ -2,17 +2,18 @@ import { time, loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { GameManager, HeroPoints, HeroPotion, HeroSpell, Marketplace, MarketplaceV2 } from "../typechain-types";
+import { GameManager, GameManagerV2, GameManagerV2__factory, HeroPoints, HeroPotion, HeroSpell, Marketplace, MarketplaceV2 } from "../typechain-types";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { PromiseOrValue } from "../typechain-types/common";
 import { BigNumberish, BytesLike } from "ethers";
+import { gameManagerv2Sol } from "../typechain-types/contracts";
 
 describe("Market", function () {
   var tokenContract: HeroPoints,
     itemContract: HeroPotion,
     spellContract: HeroSpell,
     shopContract: Marketplace | MarketplaceV2,
-    gameContract: GameManager;
+    gameContract: GameManager | GameManagerV2;
 
   var owner: SignerWithAddress,
     dev2: SignerWithAddress,
@@ -45,6 +46,10 @@ describe("Market", function () {
     const ContractGame = await ethers.getContractFactory("GameManager");
     gameContract = await upgrades.deployProxy(ContractGame) as GameManager;
     await gameContract.deployed();
+
+    const gameV2 = await ethers.getContractFactory("GameManagerV2");
+    gameContract = await upgrades.upgradeProxy(gameContract.address, gameV2) as GameManagerV2;
+    console.log("GameManager upgraded");
 
     let masterRole = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("MASTER_ROLE"));
     let minterRole = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("MINTER_ROLE"));
@@ -181,4 +186,189 @@ describe("Market", function () {
 
   });
 
+  describe("Test mint/sell/buy/cancel in one action", function () {
+    it("Should create a order", async function () {
+      let itemAmount = await itemContract.balanceOf(dev2.address, 1);
+      expect(itemAmount).equal(0);
+
+      // sell for 3 hero points by unit, accept hero point token, authorize buy at unit
+      let threeToken = ethers.utils.parseEther("3");
+      let data = [threeToken, tokenContract.address, dev2.address, true];
+      let dataTransfer = ethers.utils.defaultAbiCoder.encode(["uint256", "address", "address", "bool"], data);
+
+      // direct mint to the shop with seller infos
+      let actionmintSell: GameManager.ActionStruct = {
+        actionType: 1,
+        contractType: 2,
+        contractAddress: itemContract.address,
+        recipient: shopContract.address,
+        spender: dev2.address,
+        amount: 5,
+        tokenId: 1,
+        data: dataTransfer
+      };
+
+      // mint token for the buyer
+      let actionMint: GameManager.ActionStruct = {
+        actionType: 1,
+        contractType: 0,
+        contractAddress: tokenContract.address,
+        data: [],
+        recipient: dev3.address,
+        spender: shopContract.address,
+        amount: ethers.utils.parseEther("10"),
+        tokenId: 0,
+      };
+
+      let sixTokens = threeToken.mul(2);
+      var buyCall = shopContract.interface.encodeFunctionData("buyOrder", [dev3.address, 1, sixTokens, 2]);
+      // cancel the order
+      let actionBuy: GameManager.ActionStruct = {
+        actionType: 3,
+        contractType: 3,
+        contractAddress: shopContract.address,
+        data: buyCall,
+        recipient: shopContract.address,
+        spender: shopContract.address,
+        amount: 0,
+        tokenId: 0,
+      };
+
+      // burn 1 token received by the buyer
+      let actionBurn: GameManager.ActionStruct = {
+        actionType: 0,
+        contractType: 2,
+        contractAddress: itemContract.address,
+        data: [],
+        recipient: shopContract.address,
+        spender: dev3.address,
+        amount: 1,
+        tokenId: 1,
+      };
+
+      var cancelCall = shopContract.interface.encodeFunctionData("cancelOrder", [1]);
+
+      // cancel the order
+      let actionCancel: GameManager.ActionStruct = {
+        actionType: 3,
+        contractType: 3,
+        contractAddress: shopContract.address,
+        data: cancelCall,
+        recipient: shopContract.address,
+        spender: shopContract.address,
+        amount: 0,
+        tokenId: 0,
+      };
+
+      // will mint nft, mint token, buy nft, burn token
+      let execBuy = await gameContract.executeActions([actionmintSell, actionMint, actionBuy, actionBurn, actionCancel]);
+      await execBuy.wait();
+
+      let itemBuyer = await itemContract.balanceOf(dev3.address, 1);
+      expect(itemBuyer).equal(1);
+
+      let balandeDev2 = await tokenContract.balanceOf(dev2.address);
+      let amountSubtax = sixTokens.sub(sixTokens.mul(5).div(100));
+      expect(balandeDev2).equal(amountSubtax);
+
+      let balanceBank = await tokenContract.balanceOf(owner.address);
+      expect(balanceBank).equal(sixTokens.mul(5).div(100));
+
+      // retrieve the 3 items
+      itemAmount = await itemContract.balanceOf(dev2.address, 1);
+      expect(itemAmount).equal(3);
+
+    });
+
+  });
+
+  describe("Test mint buy burn", function () {
+    it("Should create a order", async function () {
+      let itemAmount = await itemContract.balanceOf(dev2.address, 1);
+      expect(itemAmount).equal(0);
+
+      // sell for 3 hero points by unit, accept hero point token, authorize buy at unit
+      let threeToken = ethers.utils.parseEther("3");
+      let data = [threeToken, tokenContract.address, dev2.address, true];
+      let dataTransfer = ethers.utils.defaultAbiCoder.encode(["uint256", "address", "address", "bool"], data);
+
+      // direct mint to the shop with seller infos
+      let action: GameManager.ActionStruct = {
+        actionType: 1,
+        contractType: 2,
+        contractAddress: itemContract.address,
+        recipient: shopContract.address,
+        spender: dev2.address,
+        amount: 5,
+        tokenId: 1,
+        data: dataTransfer
+      }
+
+      // will create the order
+      let exec = await gameContract.executeActions([action]);
+      await exec.wait();
+
+      let order = await shopContract.orders(1);
+      expect(order.currentAmount).equal(5);
+
+      // mint token for the buyer
+      let tenTokens = ethers.utils.parseEther("10");
+      let mintToken = await tokenContract.mint(dev3.address, tenTokens);
+      await mintToken.wait();
+      let balanceToken = await tokenContract.balanceOf(dev3.address);
+      expect(balanceToken).equal(tenTokens);
+
+      let sixTokens = threeToken.mul(2);
+      var buyCall = shopContract.interface.encodeFunctionData("buyOrder", [dev3.address, order.id, sixTokens, 2]);
+      // cancel the order
+      let actionBuy: GameManager.ActionStruct = {
+        actionType: 3,
+        contractType: 3,
+        contractAddress: shopContract.address,
+        data: buyCall,
+        recipient: shopContract.address,
+        spender: shopContract.address,
+        amount: 0,
+        tokenId: 0,
+      };
+
+      // will buy
+      let execBuy = await gameContract.executeActions([actionBuy]);
+      await execBuy.wait();
+
+      let itemBuyer = await itemContract.balanceOf(dev3.address, 1);
+      expect(itemBuyer).equal(2);
+
+      let balandeDev2 = await tokenContract.balanceOf(dev2.address);
+      let amountSubtax = sixTokens.sub(sixTokens.mul(5).div(100));
+      expect(balandeDev2).equal(amountSubtax);
+
+      let balanceBank = await tokenContract.balanceOf(owner.address);
+      expect(balanceBank).equal(sixTokens.mul(5).div(100));
+
+      var cancelCall = shopContract.interface.encodeFunctionData("cancelOrder", [order.id]);
+
+      // cancel the order
+      let actionCancel: GameManager.ActionStruct = {
+        actionType: 3,
+        contractType: 3,
+        contractAddress: shopContract.address,
+        data: cancelCall,
+        recipient: shopContract.address,
+        spender: shopContract.address,
+        amount: 0,
+        tokenId: 0,
+      };
+
+      // will cancel the order
+      let exec2 = await gameContract.executeActions([actionCancel]);
+      await exec2.wait();
+
+      // retrieve the 3 items
+      itemAmount = await itemContract.balanceOf(dev2.address, 1);
+      expect(itemAmount).equal(3);
+
+    });
+
+  });
 });
