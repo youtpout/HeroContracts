@@ -9,7 +9,8 @@ npx hardhat help
 npx hardhat test
 REPORT_GAS=true npx hardhat test
 npx hardhat node
-npx hardhat run scripts/deploy.ts
+npx hardhat run --network localhost scripts/deploy-local.ts
+
 npx hardhat run --network fantomtest scripts/deploy.ts
 npx hardhat run --network fantomtest scripts/add-right.ts
 npx hardhat run --network fantomtest scripts/upgrade-market.ts
