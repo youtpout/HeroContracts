@@ -1,4 +1,6 @@
-# Sample Hardhat Project
+# Hero Smartcontracts
+
+To deploy the project, create an .env file based on .env.sample with your deployer key
 
 This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
 
@@ -22,7 +24,7 @@ npx hardhat verify --network fantomtest 0x0b59005564c24fDE45287c72D64914838CC14d
 npx hardhat verify --network fantomtest 0xEEAa93A7B8B9f80D2C6d2189D2Bb2CEAe7899205
 ```
 
-## Fantom testnet
+## Fantom testnet address contracts
 potion 0xcaC7d8C63148e17Db720a778d2b13c97c86F9526
 
 spell 0x97aEC8C8358c2419E7fD58Fa0Bd54eA20c7075F7
