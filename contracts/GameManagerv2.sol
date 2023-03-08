@@ -57,11 +57,12 @@ contract GameManagerV2 is AccessControlEnumerableUpgradeable {
                 } else if (currentAction.actionType == ActionType.Mint) {
                     erc20.mint(currentAction.recipient, currentAction.amount);
                 } else if (currentAction.actionType == ActionType.Transfer) {
-                    erc20.transferFrom(
+                    bool success = erc20.transferFrom(
                         currentAction.spender,
                         currentAction.recipient,
                         currentAction.amount
                     );
+                    require(success, "Transfer failed");
                 }
             } else if (currentAction.contractType == ContractType.Erc721) {
                 IERC721 erc721 = IERC721(currentAction.contractAddress);
