@@ -1,11 +1,13 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import '@openzeppelin/hardhat-upgrades';
+import "@nomiclabs/hardhat-etherscan";
 
 require("dotenv").config();
 
 
 let deploy = process.env.Deploy || "4149e3ed85d04f91783a1494e961aaee0ee1ace5890106965c68ba30e45d9210";
+let myKey = process.env.ApiKey || "toto";
 
 const config: HardhatUserConfig = {
   solidity: {
@@ -52,6 +54,11 @@ const config: HardhatUserConfig = {
       live: false,
       saveDeployments: true,
       gasMultiplier: 2,
+    }
+  },
+  etherscan: {
+    apiKey: {
+      ftmTestnet: myKey,
     },
   }
 

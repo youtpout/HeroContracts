@@ -30,23 +30,6 @@ async function main() {
   await gameContract.deployed();
   console.log("gameManager", gameContract.address);
 
-  let masterRole = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("MASTER_ROLE"));
-  let minterRole = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("MINTER_ROLE"));
-
-  await shopContract.grantRole(masterRole, gameContract.address);
-  await shopContract.addTokenAccepted(tokenContract.address);
-
-  await spellContract.addMarketAddress(gameContract.address);
-  await spellContract.addMarketAddress(shopContract.address);
-  await spellContract.grantRole(minterRole, gameContract.address);
-
-  await itemContract.addMarketAddress(gameContract.address);
-  await itemContract.addMarketAddress(shopContract.address);
-  await itemContract.grantRole(minterRole, gameContract.address);
-
-  await tokenContract.addMarketAddress(gameContract.address);
-  await tokenContract.addMarketAddress(shopContract.address);
-  await tokenContract.grantRole(minterRole, gameContract.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
