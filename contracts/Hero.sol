@@ -52,8 +52,7 @@ contract Hero is
     // contract can link nft, to prevent from unauthorize contract
     mapping(address => bool) public approvedLinker;
 
-    // 5%
-    uint256 public royalties = 500;
+    uint256 public royalties;
 
     event Linked(uint256 indexed recipientTokenId, LinkInfo indexed storeInfo);
 
@@ -93,6 +92,8 @@ contract Hero is
         _grantRole(MINTER_ROLE, msg.sender);
         _grantRole(MASTER_ROLE, msg.sender);
 
+        // 5%
+        royalties = 500;
         bank = msg.sender;
     }
 

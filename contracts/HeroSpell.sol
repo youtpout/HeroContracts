@@ -25,8 +25,7 @@ contract HeroSpell is
     // operators we can transfer without approve for smooth transfer
     mapping(address => bool) public approvedMarketplaces;
 
-    // 5%
-    uint256 public royalties = 500;
+    uint256 public royalties;
 
     address public bank;
 
@@ -47,6 +46,8 @@ contract HeroSpell is
         _grantRole(PAUSER_ROLE, msg.sender);
         _grantRole(MINTER_ROLE, msg.sender);
 
+        // 5%
+        royalties = 500;
         bank = msg.sender;
     }
 

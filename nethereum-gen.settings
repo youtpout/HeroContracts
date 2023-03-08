@@ -1,0 +1,7 @@
+{
+    "projectName": "HeroContracts",
+    "namespace": "HeroContracts",
+    "lang": 0,
+    "autoCodeGen": true,
+    "projectPath": "../HeroContractsGen/"
+}

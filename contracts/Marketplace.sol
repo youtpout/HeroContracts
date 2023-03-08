@@ -51,7 +51,7 @@ contract Marketplace is
 
     // data come from safetransfer method
     struct TransferData {
-        uint256 price;
+        uint256 priceByUnit;
         address tokenAccepted;
         bool sellByUnit;
     }
@@ -167,7 +167,7 @@ contract Marketplace is
             id,
             amount,
             amount,
-            info.price,
+            info.priceByUnit,
             from,
             info.tokenAccepted,
             _msgSender(),
