@@ -12,6 +12,7 @@ npx hardhat node
 npx hardhat run scripts/deploy.ts
 npx hardhat run --network fantomtest scripts/deploy.ts
 npx hardhat run --network fantomtest scripts/add-right.ts
+npx hardhat run --network fantomtest scripts/upgrade-market.ts
 npx hardhat verify --network fantomtest 0xcaC7d8C63148e17Db720a778d2b13c97c86F9526
 npx hardhat verify --network fantomtest 0x97aEC8C8358c2419E7fD58Fa0Bd54eA20c7075F7
 npx hardhat verify --network fantomtest 0xF990548068dd68481e673dbF4f6C4175C1800eC9
