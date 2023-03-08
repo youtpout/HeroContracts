@@ -111,6 +111,9 @@ describe("Market", function () {
       let balandeDev2 = await tokenContract.balanceOf(dev2.address);
       let amountSubtax = sixTokens.sub(sixTokens.mul(5).div(100));
       expect(balandeDev2).equal(amountSubtax);
+
+      let balanceBank = await tokenContract.balanceOf(owner.address);
+      expect(balanceBank).equal(sixTokens.mul(5).div(100));
     });
 
   });

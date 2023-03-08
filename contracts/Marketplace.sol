@@ -72,6 +72,9 @@ contract Marketplace is
     /// @dev This is a static, ever increasing list
     mapping(uint256 => Order) public orders;
 
+    /// @notice Mapping from owner to a list of owned auctions
+    mapping(address => uint256[]) public ownedOrders;
+
     /// @notice The amount of orders
     uint256 public orderCount;
 
@@ -175,7 +178,11 @@ contract Marketplace is
             contractType,
             info.sellByUnit
         );
+        // save order info
         orders[orderCount] = orderInfo;
+        // list order by seller
+        ownedOrders[from].push(orderCount);
+
         emit OrderAdded(orderCount, from, orderInfo);
     }
 
@@ -207,7 +214,7 @@ contract Marketplace is
             );
         }
 
-        // Mark order
+        // update order infos
         order.currentAmount = 0;
         order.status = OrderStatus.Canceled;
 
@@ -295,7 +302,7 @@ contract Marketplace is
             );
         }
 
-        // Mark order
+        // update order infos
         uint256 currentAmount = order.currentAmount - amount;
         order.currentAmount = currentAmount;
         if (order.currentAmount == 0) {
@@ -303,6 +310,44 @@ contract Marketplace is
         }
 
         emit OrderBought(orderId, _msgSender(), amount);
+    }
+
+    function fetchPageOrders(uint256 cursor, uint256 howMany)
+        public
+        view
+        returns (Order[] memory values, uint256 newCursor)
+    {
+        uint256 length = howMany;
+        if (length > orderCount - cursor) {
+            length = orderCount - cursor;
+        }
+
+        values = new Order[](length);
+        for (uint256 i = 0; i < length; i++) {
+            values[i] = orders[cursor + i];
+        }
+
+        return (values, cursor + length);
+    }
+
+    function fetchPageOwned(
+        address user,
+        uint256 cursor,
+        uint256 howMany
+    ) public view returns (Order[] memory values, uint256 newCursor) {
+        uint256 length = howMany;
+        uint256[] storage owned = ownedOrders[user];
+        if (length > owned.length - cursor) {
+            length = owned.length - cursor;
+        }
+
+        values = new Order[](length);
+        for (uint256 i = 0; i < length; i++) {
+            uint256 index = owned[cursor + i];
+            values[i] = orders[index];
+        }
+
+        return (values, cursor + length);
     }
 
     function supportsInterface(bytes4 interfaceId)
