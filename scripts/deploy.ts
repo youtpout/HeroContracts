@@ -1,19 +1,52 @@
-import { ethers } from "hardhat";
+import { ethers, upgrades } from "hardhat";
+import { GameManager, HeroPoints, HeroPotion, HeroSpell, Marketplace } from "../typechain-types";
+import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 
 async function main() {
-  const currentTimestampInSeconds = Math.round(Date.now() / 1000);
-  const unlockTime = currentTimestampInSeconds + 60;
+  let [owner] = await ethers.getSigners();
 
-  const lockedAmount = ethers.utils.parseEther("0.001");
+  const ContractItem = await ethers.getContractFactory("HeroPotion");
+  const itemContract = await upgrades.deployProxy(ContractItem) as HeroPotion;
+  await itemContract.deployed();
+  console.log("potion", itemContract.address);
 
-  const Lock = await ethers.getContractFactory("Lock");
-  const lock = await Lock.deploy(unlockTime, { value: lockedAmount });
+  const SpellItem = await ethers.getContractFactory("HeroSpell");
+  const spellContract = await upgrades.deployProxy(SpellItem) as HeroSpell;
+  await spellContract.deployed();
+  console.log("spell", spellContract.address);
 
-  await lock.deployed();
+  const ContractToken = await ethers.getContractFactory("HeroPoints");
+  const tokenContract = await upgrades.deployProxy(ContractToken) as HeroPoints;
+  await tokenContract.deployed();
+  console.log("points", tokenContract.address);
 
-  console.log(
-    `Lock with ${ethers.utils.formatEther(lockedAmount)}ETH and unlock timestamp ${unlockTime} deployed to ${lock.address}`
-  );
+  const ContractShop = await ethers.getContractFactory("Marketplace");
+  const shopContract = await upgrades.deployProxy(ContractShop) as Marketplace;
+  await shopContract.deployed();
+  console.log("marketplace", shopContract.address);
+
+  const ContractGame = await ethers.getContractFactory("GameManager");
+  const gameContract = await upgrades.deployProxy(ContractGame) as GameManager;
+  await gameContract.deployed();
+  console.log("gameManager", gameContract.address);
+
+  let masterRole = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("MASTER_ROLE"));
+  let minterRole = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("MINTER_ROLE"));
+
+  await shopContract.grantRole(masterRole, gameContract.address);
+  await shopContract.addTokenAccepted(tokenContract.address);
+
+  await spellContract.addMarketAddress(gameContract.address);
+  await spellContract.addMarketAddress(shopContract.address);
+  await spellContract.grantRole(minterRole, gameContract.address);
+
+  await itemContract.addMarketAddress(gameContract.address);
+  await itemContract.addMarketAddress(shopContract.address);
+  await itemContract.grantRole(minterRole, gameContract.address);
+
+  await tokenContract.addMarketAddress(gameContract.address);
+  await tokenContract.addMarketAddress(shopContract.address);
+  await tokenContract.grantRole(minterRole, gameContract.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

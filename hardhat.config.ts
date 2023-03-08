@@ -2,6 +2,11 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import '@openzeppelin/hardhat-upgrades';
 
+require("dotenv").config();
+
+
+let deploy = process.env.Deploy || "4149e3ed85d04f91783a1494e961aaee0ee1ace5890106965c68ba30e45d9210";
+
 const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.18",
@@ -39,7 +44,15 @@ const config: HardhatUserConfig = {
             "6c54bbcc10f0fdbff9b150be32a2381cb46af0f4d50b0858c01c850945008d57",
         },
       ],
-    }
+    },
+    fantomtest: {
+      url: "https://rpc.ankr.com/fantom_testnet",
+      accounts: [deploy],
+      chainId: 4002,
+      live: false,
+      saveDeployments: true,
+      gasMultiplier: 2,
+    },
   }
 
 };
