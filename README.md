@@ -32,3 +32,8 @@ points 0xF990548068dd68481e673dbF4f6C4175C1800eC9
 marketplace 0x0b59005564c24fDE45287c72D64914838CC14d0E
 
 gameManager 0xEEAa93A7B8B9f80D2C6d2189D2Bb2CEAe7899205
+
+## Other repos
+[game](https://github.com/youtpout/Hero)
+
+[backend](https://github.com/youtpout/HeroApi)
