@@ -100,17 +100,15 @@ contract MarketplaceV2 is
         approvedToken[address(0)] = true;
     }
 
-    function addTokenAccepted(address tokenAddress)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
+    function addTokenAccepted(
+        address tokenAddress
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         approvedToken[tokenAddress] = true;
     }
 
-    function removeTokenAccepted(address tokenAddress)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
+    function removeTokenAccepted(
+        address tokenAddress
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         approvedToken[tokenAddress] = false;
     }
 
@@ -314,14 +312,18 @@ contract MarketplaceV2 is
         emit OrderBought(orderId, _msgSender(), amount);
     }
 
-    function fetchPageOrders(uint256 cursor, uint256 howMany)
-        public
-        view
-        returns (Order[] memory values, uint256 newCursor)
-    {
+    function fetchPageOrders(
+        uint256 cursor,
+        uint256 howMany
+    ) public view returns (Order[] memory values, uint256 newCursor) {
         uint256 length = howMany;
-        if (length > orderCount - cursor) {
-            length = orderCount - cursor;
+
+        if (orderCount == 0) {
+            return (values, 0);
+        }
+        // +1 because we start at index 1
+        if (length > (orderCount + 1) - cursor) {
+            length = (orderCount + 1) - cursor;
         }
 
         values = new Order[](length);
@@ -352,7 +354,9 @@ contract MarketplaceV2 is
         return (values, cursor + length);
     }
 
-    function supportsInterface(bytes4 interfaceId)
+    function supportsInterface(
+        bytes4 interfaceId
+    )
         public
         view
         override(ERC1155ReceiverUpgradeable, AccessControlUpgradeable)
